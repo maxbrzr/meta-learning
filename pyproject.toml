@@ -1,0 +1,21 @@
+[project]
+name = "meta-learning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "maxbrzr", email = "maximilian.burzer@kit.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mlflow>=3.9.0",
+    "torch>=2.10.0",
+    "whar-datasets",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+whar-datasets = { git = "https://github.com/teco-kit/whar-datasets.git" }
