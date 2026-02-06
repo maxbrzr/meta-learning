@@ -110,7 +110,7 @@ class TinyHAR(nn.Module):
             size = (size + 4 - 5) // 2 + 1
         return size
 
-    def encoder(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
         """
         Encoder function to extract features before classification.
         Useful for feature extraction tasks.
@@ -201,7 +201,7 @@ class TinyHAR(nn.Module):
             Tensor: Class logits of shape (Batch, Num_Classes).
         """
 
-        final_feature = self.encoder(x)
+        final_feature = self.encode(x)
 
         # Final classification
         logits: Tensor = self.classifier(final_feature)
