@@ -9,6 +9,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "mlflow>=3.9.0",
+    "ncps>=1.0.1",
+    "seaborn>=0.13.2",
     "torch>=2.10.0",
     "whar-datasets",
 ]

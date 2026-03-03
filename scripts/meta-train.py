@@ -88,14 +88,14 @@ def run(
 
 
 if __name__ == "__main__":
-    num_epochs = 20
+    num_epochs = 5
     patience = 5
     batch_size = 32
     learning_rate = 0.001
     shots_per_class = 3
 
     dataset_id = WHARDatasetID.UCI_HAR
-    experiment_id = f"metatinyhar-{dataset_id.name.lower()}_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}_shots{shots_per_class}"
+    experiment_id = f"meta_tinyhar-{dataset_id.name.lower()}_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}_shots{shots_per_class}"
 
     mlflow.set_tracking_uri("http://localhost:5001")
     mlflow.set_experiment(experiment_id)
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     splitter = LOSOSplitter(cfg)
     splits = splitter.get_splits(session_df, window_df)
 
-    for i in range(len(splits)):
+    for i in range(1, len(splits)):
         split = splits[i]
         print(f"Running split {i} / {len(splits) - 1}")
         run_id = f"split{i}_{experiment_id}"
