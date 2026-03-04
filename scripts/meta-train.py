@@ -13,7 +13,7 @@ from whar_datasets import (
 )
 from whar_datasets.splitting.split import Split
 
-from meta_learning.adaption.meta_tiny_har import MetaTinyHAR
+from meta_learning.lora.meta_tinyhar import MetaTinyHAR
 from meta_learning.training.meta_trainer import MetaTrainer
 
 
@@ -38,7 +38,6 @@ def run(
 
     print(f"num subjects / splits: {cfg.num_of_subjects}/{len(splits)}")
     print(f"num channels: {len(cfg.sensor_channels)}")
-
     print(f"Number of training indices: {len(split.train_indices)}")
     print(f"Number of validation indices: {len(split.val_indices)}")
     print(f"Number of test indices: {len(split.test_indices)}")
@@ -47,7 +46,6 @@ def run(
         input_channels=len(cfg.sensor_channels),
         window_size=int(cfg.window_time * cfg.sampling_freq),
         num_classes=cfg.num_of_activities,
-        # num_filters=64,
     )
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -71,31 +69,31 @@ def run(
     )
 
     root_dir = "./results"
-    if os.path.exists(root_dir) is False:
+    if not os.path.exists(root_dir):
         os.mkdir(root_dir)
 
-    sub_dir = experiment_id
-    if os.path.exists(f"{root_dir}/{sub_dir}") is False:
-        os.mkdir(f"{root_dir}/{sub_dir}")
+    exp_dir = f"{root_dir}/{experiment_id}"
+    if not os.path.exists(exp_dir):
+        os.mkdir(exp_dir)
 
-    sub_sub_dir = run_id
-    if os.path.exists(f"{root_dir}/{sub_sub_dir}") is False:
-        os.mkdir(f"{root_dir}/{sub_sub_dir}")
+    run_dir = f"{exp_dir}/{run_id}"
+    if not os.path.exists(run_dir):
+        os.mkdir(run_dir)
 
-    torch.save(best_model_state, f"{root_dir}/{sub_sub_dir}/state_dict.pth")
-    with open(f"{root_dir}/{sub_sub_dir}/metrics.json", "w") as f:
+    torch.save(best_model_state, f"{run_dir}/state_dict.pth")
+    with open(f"{run_dir}/metrics.json", "w") as f:
         json.dump(best_metrics, f, indent=4)
 
 
 if __name__ == "__main__":
-    num_epochs = 5
+    num_epochs = 20
     patience = 5
-    batch_size = 32
-    learning_rate = 0.001
-    shots_per_class = 3
+    batch_size = 16
+    learning_rate = 0.0003
+    shots_per_class = 10
 
     dataset_id = WHARDatasetID.UCI_HAR
-    experiment_id = f"meta_tinyhar-{dataset_id.name.lower()}_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}_shots{shots_per_class}"
+    experiment_id = f"{dataset_id.name.lower()}_lora_meta_tinyhar_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}_shots{shots_per_class}"
 
     mlflow.set_tracking_uri("http://localhost:5001")
     mlflow.set_experiment(experiment_id)
@@ -112,10 +110,10 @@ if __name__ == "__main__":
     splitter = LOSOSplitter(cfg)
     splits = splitter.get_splits(session_df, window_df)
 
-    for i in range(1, len(splits)):
+    for i in range(len(splits)):
         split = splits[i]
         print(f"Running split {i} / {len(splits) - 1}")
-        run_id = f"split{i}_{experiment_id}"
+        run_id = f"split_{i}_{experiment_id}"
         run(
             experiment_id,
             run_id,

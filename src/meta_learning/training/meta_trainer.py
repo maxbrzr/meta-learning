@@ -1,4 +1,5 @@
 import copy
+import math
 from typing import Dict, List, Tuple
 
 import mlflow
@@ -89,61 +90,28 @@ class MetaTrainer:
 
         return x_tensor, y_tensor
 
-    # def _get_support_set(
-    #     self, subject_id: int, available_indices: List[int]
-    # ) -> Tuple[torch.Tensor, torch.Tensor]:
-    #     """
-    #     Samples K shots for a specific subject from the available indices.
-    #     """
-    #     # Filter indices for this subject within the current split to prevent leakage
-    #     subj_indices = self.loader.filter_indices(
-    #         indices=available_indices, subject_id=subject_id
-    #     )
-
-    #     if len(subj_indices) < self.shots_per_class:
-    #         # Fallback: if not enough samples, duplicate existing ones
-    #         selected_indices = np.random.choice(
-    #             subj_indices, self.shots_per_class, replace=True
-    #         ).tolist()
-    #     else:
-    #         selected_indices = np.random.choice(
-    #             subj_indices, self.shots_per_class, replace=False
-    #         ).tolist()
-
-    #     # Fetch data
-    #     acts, _, samples = self.loader.sample_items(
-    #         batch_size=self.shots_per_class, indices=selected_indices
-    #     )
-
-    #     sx, sy = self._collate_tensors(samples, acts)
-
-    #     # Permute for SetEncoder: (K, T, C) -> (K, C, T)
-    #     sx = sx.permute(0, 2, 1)
-
-    #     return sx, sy
-
     def _get_support_set(
         self, subject_id: int, available_indices: List[int]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Samples K shots PER CLASS for a specific subject.
+        Support samples are always from the same subject.
         """
         support_x_list = []
         support_y_list = []
 
         # Iterate through every activity class to ensure balance
         for cls_id in range(self.num_classes):
-            # Filter for: Specific Subject AND Specific Activity
-            # Note: Your loader.filter_indices needs to support activity_id filtering (it does)
-            target_indices = self.loader.filter_indices(
+            subject_class_indices = self.loader.filter_indices(
                 indices=available_indices, subject_id=subject_id, activity_id=cls_id
             )
+            target_indices = subject_class_indices
 
-            # Handle edge case: Subject might miss a specific activity (e.g., didn't run)
-            # In strict Meta-Learning, we usually skip or error.
-            # Here we skip, but in a real app, you might want to paddle with zeros or duplicate.
             if len(target_indices) == 0:
-                continue
+                raise ValueError(
+                    f"No support samples for subject {subject_id}, class {cls_id} "
+                    "in current split after leakage exclusion."
+                )
 
             # Sample K shots
             if len(target_indices) < self.shots_per_class:
@@ -174,14 +142,21 @@ class MetaTrainer:
 
         return final_sx, final_sy
 
-    def _generate_meta_batch(self, indices_pool: List[int]) -> Dict[str, torch.Tensor]:
+    def _generate_meta_batch(
+        self, query_indices: List[int], support_pool_indices: List[int]
+    ) -> Dict[str, torch.Tensor]:
         """
-        Generates a batch of (Query, Support) pairs.
+        Generates a batch of (Query, Support) pairs from explicit query indices.
         """
-        # 1. Sample Query Batch
-        query_acts, query_subjs, query_samples = self.loader.sample_items(
-            batch_size=self.batch_size, indices=indices_pool
-        )
+        # 1. Deterministically fetch query samples from given indices
+        query_acts: List[int] = []
+        query_subjs: List[int] = []
+        query_samples = []
+        for idx in query_indices:
+            act, subj, sample = self.loader.get_item(idx)
+            query_acts.append(act)
+            query_subjs.append(subj)
+            query_samples.append(sample)
 
         # Convert Query to Tensor: (Batch, Time, Channels)
         qx, qy = self._collate_tensors(query_samples, query_acts)
@@ -191,8 +166,12 @@ class MetaTrainer:
         support_x_list = []
         support_y_list = []
 
-        for sid in query_subjs:
-            sx, sy = self._get_support_set(sid, indices_pool)
+        for q_idx, sid in zip(query_indices, query_subjs):
+            # Prevent query-support leakage for this query item.
+            support_pool_wo_query = [
+                idx for idx in support_pool_indices if idx != q_idx
+            ]
+            sx, sy = self._get_support_set(sid, support_pool_wo_query)
             support_x_list.append(sx)
             support_y_list.append(sy)
 
@@ -201,6 +180,39 @@ class MetaTrainer:
         final_sy = torch.stack(support_y_list).to(self.device)
 
         return {"x": qx, "y": qy, "sx": final_sx, "sy": final_sy}
+
+    def _get_feasible_query_indices(self, indices_pool: List[int]) -> List[int]:
+        """
+        Returns query indices that can form leakage-free support sets where
+        support samples are from the same subject and contain every class.
+        """
+        subject_labels = {
+            idx: self.loader.get_subject_label(idx) for idx in indices_pool
+        }
+        activity_labels = {
+            idx: self.loader.get_activity_label(idx) for idx in indices_pool
+        }
+
+        class_counts: Dict[Tuple[int, int], int] = {}
+        for idx in indices_pool:
+            key = (subject_labels[idx], activity_labels[idx])
+            class_counts[key] = class_counts.get(key, 0) + 1
+
+        feasible: List[int] = []
+        for idx in indices_pool:
+            sid = subject_labels[idx]
+            q_act = activity_labels[idx]
+            is_feasible = True
+            for cls_id in range(self.num_classes):
+                count = class_counts.get((sid, cls_id), 0)
+                if cls_id == q_act:
+                    count -= 1  # exclude the query itself to avoid leakage
+                if count <= 0:
+                    is_feasible = False
+                    break
+            if is_feasible:
+                feasible.append(idx)
+        return feasible
 
     def _run_epoch(
         self, indices: List[int], is_train: bool, desc: str
@@ -211,22 +223,56 @@ class MetaTrainer:
             self.model.eval()
 
         total_loss = 0.0
+        total_examples = 0
         all_preds = []
         all_targets = []
+        feasible_query_indices = self._get_feasible_query_indices(indices)
 
-        num_batches = len(indices) // self.batch_size
-        if num_batches == 0:
-            num_batches = 1
+        if len(feasible_query_indices) == 0:
+            raise ValueError(
+                f"No feasible query indices for {desc}: cannot build same-subject, "
+                "leakage-free support sets with full class coverage."
+            )
+        if not is_train and len(feasible_query_indices) != len(indices):
+            print(
+                f"{desc}: using {len(feasible_query_indices)}/{len(indices)} feasible "
+                "query indices (strict same-subject, leakage-free support)."
+            )
 
-        pbar = tqdm(range(num_batches), desc=desc, leave=False)
+        if is_train:
+            num_batches = len(feasible_query_indices) // self.batch_size
+            if num_batches == 0:
+                num_batches = 1
+            pbar = tqdm(range(num_batches), desc=desc, leave=False)
+        else:
+            ordered_query_indices = list(feasible_query_indices)
+            num_batches = math.ceil(len(ordered_query_indices) / self.batch_size)
+            pbar = tqdm(range(num_batches), desc=desc, leave=False)
+
         context = torch.enable_grad() if is_train else torch.no_grad()
 
         with context:
-            for _ in pbar:
+            for batch_idx in pbar:
                 if is_train:
                     self.optimizer.zero_grad()
+                    # Training keeps stochastic query sampling from the train split.
+                    sampled_query_indices = np.random.choice(
+                        np.asarray(feasible_query_indices),
+                        size=self.batch_size,
+                        replace=True,
+                    ).tolist()
+                    batch_data = self._generate_meta_batch(
+                        sampled_query_indices, indices
+                    )
+                else:
+                    start = batch_idx * self.batch_size
+                    end = min(
+                        (batch_idx + 1) * self.batch_size,
+                        len(ordered_query_indices),  # type: ignore
+                    )
+                    query_batch_indices = ordered_query_indices[start:end]  # type: ignore
+                    batch_data = self._generate_meta_batch(query_batch_indices, indices)
 
-                batch_data = self._generate_meta_batch(indices)
                 logits = self.model(
                     x=batch_data["x"],
                     support_x=batch_data["sx"],
@@ -266,7 +312,9 @@ class MetaTrainer:
                         step=self.global_step,
                     )
 
-                total_loss += batch_loss
+                batch_size_curr = int(batch_data["y"].shape[0])
+                total_loss += batch_loss * batch_size_curr
+                total_examples += batch_size_curr
                 all_preds.append(torch.from_numpy(batch_preds_cpu))
                 all_targets.append(torch.from_numpy(batch_targets_cpu))
                 pbar.set_postfix(
@@ -274,7 +322,7 @@ class MetaTrainer:
                 )
 
         # Aggregation
-        avg_loss = total_loss / num_batches
+        avg_loss = total_loss / max(total_examples, 1)
         all_preds_np = torch.cat(all_preds).numpy()
         all_targets_np = torch.cat(all_targets).numpy()
         epoch_acc = (all_preds_np == all_targets_np).mean()
