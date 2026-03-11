@@ -94,20 +94,34 @@ def run(
 
 
 if __name__ == "__main__":
-    num_epochs = 20
+    num_epochs = 30
     patience = 5
     batch_size = 128
     learning_rate = 0.0003
 
-    dataset_id = WHARDatasetID.UCI_HAR
-    experiment_id = f"{dataset_id.name.lower()}_tinyhar_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}"
-
-    mlflow.set_tracking_uri("http://localhost:5001")
-    mlflow.set_experiment(experiment_id)
+    dataset_id = WHARDatasetID.DSADS
 
     # create cfg for UCI HAR dataset
     cfg = get_dataset_cfg(dataset_id, "./datasets")
+    cfg.sensor_channels = [
+        "RA_xacc",
+        "RA_yacc",
+        "RA_zacc",
+        "RA_xgyro",
+        "RA_ygyro",
+        "RA_zgyro",
+        "RL_xacc",
+        "RL_yacc",
+        "RL_zacc",
+        "RL_xgyro",
+        "RL_ygyro",
+        "RL_zgyro",
+    ]
     cfg.parallelize = True
+
+    experiment_id = f"{dataset_id.name.lower()}_tinyhar_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}"
+    mlflow.set_tracking_uri("http://localhost:5001")
+    mlflow.set_experiment(experiment_id)
 
     # create and run pre-processing pipeline
     pre_pipeline = PreProcessingPipeline(cfg)
