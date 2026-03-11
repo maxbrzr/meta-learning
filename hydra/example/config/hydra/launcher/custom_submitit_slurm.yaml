@@ -1,0 +1,30 @@
+defaults:
+  - submitit_slurm
+
+partition: normal
+nodes: 1
+tasks_per_node: 1
+gpus_per_node: 1
+cpus_per_task: 4
+timeout_min: 120
+mem_gb: 16
+
+setup:
+  - 'echo ">>> [DEBUG] Starting Job $SLURM_JOB_ID on Node: $(hostname)"'
+  - 'echo ">>> [DEBUG] TMPDIR is located at: $TMPDIR"'
+  - 'DATASET_ROOT="${hydra:runtime.cwd}/${data.datasets_dir}"'
+  - 'DATASET_ID="${data.dataset_id}"'
+  - 'SRC_DIR="$DATASET_ROOT/$DATASET_ID"'
+  - 'ARCHIVE="$DATASET_ROOT/$DATASET_ID.tgz"'
+  - 'TMP_DATASETS_DIR="$TMPDIR/${data.datasets_dir}"'
+  - 'TMP_ARCHIVE="$TMP_DATASETS_DIR/$DATASET_ID.tgz"'
+  - 'TMP_DATASET_DIR="$TMP_DATASETS_DIR/$DATASET_ID"'
+  - 'if [ ! -d "$SRC_DIR" ]; then echo "!!! [ERROR] Dataset directory not found: $SRC_DIR"; exit 1; fi'
+  - 'if [ ! -f "$ARCHIVE" ]; then echo ">>> [DEBUG] Creating archive: $ARCHIVE"; tar -C "$DATASET_ROOT" -czf "$ARCHIVE" "$DATASET_ID"; else echo ">>> [DEBUG] Reusing existing archive: $ARCHIVE"; fi'
+  - 'mkdir -p "$TMP_DATASETS_DIR"'
+  - 'cp "$ARCHIVE" "$TMP_ARCHIVE"'
+  - 'echo ">>> [DEBUG] Extracting $TMP_ARCHIVE into $TMP_DATASETS_DIR"'
+  - 'tar -C "$TMP_DATASETS_DIR" -xzf "$TMP_ARCHIVE"'
+  - 'if [ ! -d "$TMP_DATASET_DIR" ]; then echo "!!! [ERROR] Extracted dataset directory missing: $TMP_DATASET_DIR"; exit 1; fi'
+  - 'export DATASETS_DIR="$TMP_DATASET_DIR"'
+  - 'echo ">>> [DEBUG] DATASETS_DIR set to: $DATASETS_DIR"'
