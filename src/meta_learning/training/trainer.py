@@ -1,13 +1,15 @@
 import copy
 from typing import Dict, Tuple
 
-import mlflow
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+from meta_learning.tracking import NullTracker, Tracker
+from meta_learning.training.run_config import TinyHARRunConfig
 
 
 class EarlyStopping:
@@ -47,6 +49,7 @@ class Trainer:
         optimizer: optim.Optimizer,
         criterion: nn.Module,
         device: torch.device,
+        tracker: Tracker | None = None,
     ):
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -55,8 +58,9 @@ class Trainer:
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
+        self.tracker = tracker or NullTracker()
 
-        # Track global step for MLflow continuity
+        # Track global step for tracker continuity
         self.global_step = 0
 
     def _process_batch(
@@ -124,7 +128,7 @@ class Trainer:
                 all_preds.append(preds_cpu)
                 all_targets.append(targets_cpu)
 
-                # --- MLflow Logging (Train only: Log every batch) ---
+                # --- Tracker Logging (Train only: log every batch) ---
                 if is_train:
                     batch_acc = (preds_cpu.numpy() == targets_cpu.numpy()).mean()
                     batch_f1 = float(
@@ -136,7 +140,7 @@ class Trainer:
                         )
                     )
 
-                    mlflow.log_metrics(  # type: ignore
+                    self.tracker.log_metrics(
                         {
                             f"{desc.lower()}/loss": loss_val,
                             f"{desc.lower()}/accuracy": batch_acc,
@@ -162,9 +166,9 @@ class Trainer:
             f1_score(all_targets_np, all_preds_np, average="macro", zero_division=0)
         )
 
-        # --- MLflow Logging (Val/Test: Log once per epoch) ---
+        # --- Tracker Logging (Val/Test: log once per epoch) ---
         if not is_train:
-            mlflow.log_metrics(  # type: ignore
+            self.tracker.log_metrics(
                 {
                     f"{desc.lower()}/loss": avg_loss,
                     f"{desc.lower()}/accuracy": accuracy,
@@ -176,26 +180,23 @@ class Trainer:
         return {"loss": avg_loss, "accuracy": accuracy, "f1_macro": f1}
 
     def fit(
-        self, run_name: str, epochs: int = 20, patience: int = 5
+        self,
+        run_name: str,
+        run_cfg: TinyHARRunConfig,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, float]]]:
+        epochs = run_cfg.epochs
+        patience = run_cfg.patience
         early_stopper = EarlyStopping(patience=patience)
         best_model_state = copy.deepcopy(self.model.state_dict())
         best_metrics: Dict[str, Dict[str, float]] = {}
 
         print(f"Starting training on {self.device} for {epochs} epochs.")
 
-        with mlflow.start_run(run_name=run_name):  # type: ignore
-            # Log Hyperparameters
-            mlflow.log_params(  # type: ignore
-                {
-                    "epochs": epochs,
-                    "patience": patience,
-                    "batch_size": self.train_loader.batch_size,
-                    "optimizer": type(self.optimizer).__name__,
-                    "learning_rate": self.optimizer.param_groups[0]["lr"],
-                    "model_class": type(self.model).__name__,
-                }
-            )
+        with self.tracker.start_run(run_name=run_name):
+            params = run_cfg.to_tracking_dict()
+            params["optimizer"] = type(self.optimizer).__name__
+            params["model_class"] = type(self.model).__name__
+            self.tracker.log_params(params)
 
             for epoch in range(epochs):
                 print(f"\nEpoch {epoch + 1}/{epochs}")

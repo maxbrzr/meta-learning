@@ -2,7 +2,6 @@ import json
 import os
 from glob import glob
 
-import mlflow
 import torch
 from whar_datasets import (
     Loader,
@@ -15,6 +14,8 @@ from whar_datasets import (
 from whar_datasets.splitting.split import Split
 
 from meta_learning.lora.meta_tinyhar import MetaTinyHAR
+from meta_learning.tracking import Tracker, create_tracker
+from meta_learning.training.run_config import MetaPretrainedRunConfig
 from meta_learning.training.meta_trainer import MetaTrainer
 
 
@@ -94,18 +95,8 @@ def run(
     run_id: str,
     split_idx: int,
     split: Split,
-    num_epochs: int,
-    patience: int,
-    batch_size: int,
-    learning_rate: float,
-    shots_per_class: int | tuple[int, int],
-    tinyhar_checkpoint_path: str | None,
-    final_eval_episodes: int,
-    set_encoder_variant: str,
-    set_encoder_num_heads: int,
-    class_aware: bool,
-    hypernetwork_variant: str,
-    num_train_batches_override: int | None,
+    run_cfg: MetaPretrainedRunConfig,
+    tracker: Tracker,
 ):
     # create and run post-processing pipeline for the specific split
     post_pipeline = PostProcessingPipeline(
@@ -126,16 +117,16 @@ def run(
         input_channels=len(cfg.sensor_channels),
         window_size=int(cfg.window_time * cfg.sampling_freq),
         num_classes=cfg.num_of_activities,
-        set_encoder_variant=set_encoder_variant,
-        set_encoder_num_heads=set_encoder_num_heads,
-        class_aware=class_aware,
-        hypernetwork_variant=hypernetwork_variant,
+        set_encoder_variant=run_cfg.set_encoder_variant,
+        set_encoder_num_heads=run_cfg.set_encoder_num_heads,
+        class_aware=run_cfg.class_aware,
+        hypernetwork_variant=run_cfg.hypernetwork_variant,
     )
 
     resolved_checkpoint_path = _resolve_tinyhar_checkpoint_path(
         split_idx=split_idx,
         dataset_name=dataset_id.name,
-        checkpoint_path_or_dir=tinyhar_checkpoint_path,
+        checkpoint_path_or_dir=run_cfg.tinyhar_checkpoint_path,
         results_root="./results",
     )
     print(f"Using TinyHAR checkpoint: {resolved_checkpoint_path}")
@@ -150,7 +141,7 @@ def run(
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     print(f"Trainable parameter tensors after freezing: {len(trainable_params)}")
 
-    optimizer = torch.optim.Adam(trainable_params, lr=learning_rate)
+    optimizer = torch.optim.Adam(trainable_params, lr=run_cfg.learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -162,19 +153,18 @@ def run(
         criterion=criterion,
         device=device,
         num_classes=len(cfg.activity_names),
-        shots_per_class=shots_per_class,
-        batch_size=batch_size,
-        num_train_batches_override=num_train_batches_override,
+        shots_per_class=run_cfg.shots_per_class,
+        batch_size=run_cfg.batch_size,
+        num_train_batches_override=run_cfg.num_train_batches_override,
+        tracker=tracker,
     )
 
     # Defensive cleanup for notebook/restart scenarios where a run is still open.
-    while mlflow.active_run() is not None:
-        mlflow.end_run()  # type: ignore[no-untyped-call]
+    tracker.end_active_runs()
 
     best_model_state, best_metrics = trainer.fit(
         run_id=run_id,
-        epochs=num_epochs,
-        patience=patience,
+        run_cfg=run_cfg,
     )
 
     root_dir = "./results"
@@ -190,35 +180,21 @@ def run(
         os.mkdir(run_dir)
 
     torch.save(best_model_state, f"{run_dir}/state_dict.pth")
-    params = {
-        "dataset_id": dataset_id.name,
-        "split_idx": split_idx,
-        "num_epochs": num_epochs,
-        "patience": patience,
-        "batch_size": batch_size,
-        "learning_rate": learning_rate,
-        "shots_per_class": shots_per_class,
-        "final_eval_episodes": final_eval_episodes,
-        "tinyhar_checkpoint_path": tinyhar_checkpoint_path,
-        "set_encoder_variant": set_encoder_variant,
-        "set_encoder_num_heads": set_encoder_num_heads,
-        "class_aware": class_aware,
-        "hypernetwork_variant": hypernetwork_variant,
-        "num_train_batches_override": num_train_batches_override,
-    }
+    params = run_cfg.to_tracking_dict()
+    params["split_idx"] = split_idx
     with open(f"{run_dir}/params.json", "w") as f:
         json.dump(params, f, indent=4)
 
     # Final sweep evaluation on restored best model.
     # Persist metrics after each K-shot result to avoid losing progress on long sweeps.
-    best_metrics["final_eval"] = {"episodes": final_eval_episodes, "test": {}}
+    best_metrics["final_eval"] = {"episodes": run_cfg.final_eval_episodes, "test": {}}
     with open(f"{run_dir}/metrics.json", "w") as f:
         json.dump(best_metrics, f, indent=4)
 
     for shots in trainer.get_shot_sweep_values():
         test_metrics = trainer.evaluate_final_for_shot(
             shots_per_class=shots,
-            final_eval_episodes=final_eval_episodes,
+            final_eval_episodes=run_cfg.final_eval_episodes,
         )
         best_metrics["final_eval"]["test"][str(shots)] = test_metrics  # type: ignore[index]
         with open(f"{run_dir}/metrics.json", "w") as f:
@@ -229,20 +205,8 @@ def run(
 
 
 if __name__ == "__main__":
-    num_epochs = 30
-    patience = 5
-    batch_size = 12
-    learning_rate = 0.0003
-    shots_per_class: int | tuple[int, int] = (1, 16)
-    final_eval_episodes = 64
-    tinyhar_checkpoint_path: str | None = None
-    set_encoder_variant = "mean"  # mean | self_attention_mean | query_attention
-    set_encoder_num_heads = 4
-    class_aware = False
-    hypernetwork_variant = "task"  # task | class_aware
-    num_train_batches_override: int | None = 128
-
     dataset_id = WHARDatasetID.DSADS
+    run_cfg = MetaPretrainedRunConfig(dataset_id=dataset_id.name)
 
     # create cfg for UCI HAR dataset
     cfg = get_dataset_cfg(dataset_id, "./datasets")
@@ -262,14 +226,13 @@ if __name__ == "__main__":
     ]
     cfg.parallelize = True
 
-    experiment_id = (
-        f"{dataset_id.name.lower()}_lorametatinyhar_pre"
-        f"_shots{shots_per_class}"
-        f"_se{set_encoder_variant}_ca{int(class_aware)}_hn{hypernetwork_variant}"
-    )
+    experiment_id = run_cfg.create_experiment_id()
 
-    mlflow.set_tracking_uri("http://localhost:5001")
-    mlflow.set_experiment(experiment_id)
+    tracker = create_tracker(
+        backend=run_cfg.tracker_backend,  # type: ignore[arg-type]
+        experiment_name=experiment_id,
+        tracking_uri=run_cfg.tracking_uri,
+    )
 
     # create and run pre-processing pipeline
     pre_pipeline = PreProcessingPipeline(cfg)
@@ -288,16 +251,6 @@ if __name__ == "__main__":
             run_id,
             i,
             split,
-            num_epochs,
-            patience,
-            batch_size,
-            learning_rate,
-            shots_per_class,
-            tinyhar_checkpoint_path,
-            final_eval_episodes,
-            set_encoder_variant,
-            set_encoder_num_heads,
-            class_aware,
-            hypernetwork_variant,
-            num_train_batches_override,
+            run_cfg,
+            tracker,
         )

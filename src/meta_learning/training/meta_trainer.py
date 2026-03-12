@@ -2,7 +2,6 @@ import copy
 import math
 from typing import Any, Dict, List, Tuple
 
-import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
@@ -11,6 +10,14 @@ from sklearn.metrics import f1_score
 from tqdm.auto import tqdm
 from whar_datasets import Loader
 from whar_datasets.splitting.split import Split
+
+from meta_learning.tracking import NullTracker, Tracker
+from meta_learning.training.run_config import (
+    MetaPretrainedRunConfig,
+    MetaTrainRunConfig,
+)
+
+MetaRunConfig = MetaTrainRunConfig | MetaPretrainedRunConfig
 
 
 class EarlyStopping:
@@ -50,6 +57,7 @@ class MetaTrainer:
         shots_per_class: int | Tuple[int, int] = 5,
         batch_size: int = 32,
         num_train_batches_override: int | None = None,
+        tracker: Tracker | None = None,
     ):
         """
         Args:
@@ -95,6 +103,7 @@ class MetaTrainer:
         self.num_train_batches_override = num_train_batches_override
         self.batch_size = batch_size
         self.global_step = 0
+        self.tracker = tracker or NullTracker()
 
     def _sample_shots_per_class(self) -> int:
         """
@@ -450,7 +459,7 @@ class MetaTrainer:
 
                 # Log Train Batch Metrics (The "High-Res" View)
                 if is_train:
-                    mlflow.log_metrics(  # type: ignore
+                    self.tracker.log_metrics(
                         {
                             f"{desc.lower()}/loss": batch_loss,
                             f"{desc.lower()}/accuracy": batch_acc,
@@ -476,7 +485,7 @@ class MetaTrainer:
         )
 
         if not is_train:
-            mlflow.log_metrics(  # type: ignore
+            self.tracker.log_metrics(
                 {
                     f"{desc.lower()}/loss": metrics["loss"],
                     f"{desc.lower()}/accuracy": metrics["accuracy"],
@@ -493,7 +502,7 @@ class MetaTrainer:
         desc: str,
         n_eval_episodes: int = 128,
         shots_per_class_override: int | None = None,
-        log_to_mlflow: bool = True,
+        log_to_tracker: bool = True,
     ) -> Dict[str, float]:
         """
         Evaluates the model by simulating a real-world calibration phase.
@@ -600,8 +609,8 @@ class MetaTrainer:
                 f"empty_query={skipped_empty_query}"
             )
 
-        if log_to_mlflow:
-            mlflow.log_metrics(  # type: ignore
+        if log_to_tracker:
+            self.tracker.log_metrics(
                 {
                     f"{desc.lower()}/loss": metrics["loss"],
                     f"{desc.lower()}/accuracy": metrics["accuracy"],
@@ -636,7 +645,7 @@ class MetaTrainer:
                 desc=f"Final-Test-K{shots}",
                 n_eval_episodes=final_eval_episodes,
                 shots_per_class_override=shots,
-                log_to_mlflow=False,
+                log_to_tracker=False,
             )
             final_eval["test"][str(shots)] = test_metrics
 
@@ -653,15 +662,16 @@ class MetaTrainer:
             desc=f"Final-Test-K{shots_per_class}",
             n_eval_episodes=final_eval_episodes,
             shots_per_class_override=shots_per_class,
-            log_to_mlflow=False,
+            log_to_tracker=False,
         )
 
     def fit(
         self,
         run_id: str,
-        epochs: int = 20,
-        patience: int = 5,
+        run_cfg: MetaRunConfig,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, object]]]:
+        epochs = run_cfg.epochs
+        patience = run_cfg.patience
         early_stopper = EarlyStopping(patience=patience)
         best_model_state = copy.deepcopy(self.model.state_dict())
         best_metrics: Dict[str, Dict[str, Any]] = {}
@@ -675,26 +685,11 @@ class MetaTrainer:
         else:
             print(f"Config: Shots per Class={self.shots_per_class_fixed}")
 
-        with mlflow.start_run(run_name=run_id):  # type : ignore
-            mlflow.log_params(  # type : ignore
-                {
-                    "epochs": epochs,
-                    "patience": patience,
-                    "batch_size": self.batch_size,
-                    "shots_per_class": (
-                        self.shots_per_class_fixed
-                        if self.shots_per_class_range is None
-                        else f"{self.shots_per_class_range[0]}-{self.shots_per_class_range[1]}"
-                    ),
-                    "num_train_batches_override": (
-                        self.num_train_batches_override
-                        if self.num_train_batches_override is not None
-                        else "auto"
-                    ),
-                    "optimizer": type(self.optimizer).__name__,
-                    "learning_rate": self.optimizer.param_groups[0]["lr"],
-                }
-            )
+        with self.tracker.start_run(run_name=run_id):
+            params = run_cfg.to_tracking_dict()
+            params["optimizer"] = type(self.optimizer).__name__
+            params["model_class"] = type(self.model).__name__
+            self.tracker.log_params(params)
 
             for epoch in range(epochs):
                 print(f"\nEpoch {epoch + 1}/{epochs}")

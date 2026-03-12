@@ -10,5 +10,5 @@ wheels/
 .venv
 
 results/
-
+.env
 .DS_Store

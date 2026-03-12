@@ -1,7 +1,6 @@
 import json
 import os
 
-import mlflow
 import torch
 from whar_datasets import (
     Loader,
@@ -15,6 +14,8 @@ from whar_datasets import (
 from whar_datasets.splitting.split import Split
 
 from meta_learning.models.tiny_har import TinyHAR
+from meta_learning.tracking import Tracker, create_tracker
+from meta_learning.training.run_config import TinyHARRunConfig
 from meta_learning.training.trainer import Trainer
 
 
@@ -22,10 +23,8 @@ def run(
     experiment_id: str,
     run_id: str,
     split: Split,
-    num_epochs: int,
-    patience: int,
-    batch_size: int,
-    learning_rate: float,
+    run_cfg: TinyHARRunConfig,
+    tracker: Tracker,
 ):
     # create and run post-processing pipeline for the specific split
     post_pipeline = PostProcessingPipeline(
@@ -36,7 +35,7 @@ def run(
     # create dataloaders for the specific split
     loader = Loader(session_df, window_df, post_pipeline.samples_dir, samples)
     adapter = TorchAdapter(cfg, loader, split)
-    dataloaders = adapter.get_dataloaders(batch_size=batch_size)
+    dataloaders = adapter.get_dataloaders(batch_size=run_cfg.batch_size)
     train_loader, val_loader, test_loader = (
         dataloaders["train"],
         dataloaders["val"],
@@ -45,9 +44,11 @@ def run(
 
     print(f"num subjects / splits: {cfg.num_of_subjects}/{len(splits)}")
     print(f"num channels: {len(cfg.sensor_channels)}")
-    print(f"Number of training samples: {len(train_loader) * batch_size}")
-    print(f"Number of validation samples: {len(val_loader) * batch_size}")
-    print(f"Number of test samples: {len(test_loader) * batch_size}")
+    print(f"Number of training samples: {len(train_loader) * run_cfg.batch_size}")
+    print(
+        f"Number of validation samples: {len(val_loader) * run_cfg.batch_size}"
+    )
+    print(f"Number of test samples: {len(test_loader) * run_cfg.batch_size}")
     print(f"Number of training indices: {len(split.train_indices)}")
     print(f"Number of validation indices: {len(split.val_indices)}")
     print(f"Number of test indices: {len(split.test_indices)}")
@@ -58,7 +59,7 @@ def run(
         num_classes=cfg.num_of_activities,
     )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=run_cfg.learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -70,10 +71,12 @@ def run(
         optimizer=optimizer,
         criterion=criterion,
         device=device,
+        tracker=tracker,
     )
 
     best_model_state, best_metrics = trainer.fit(
-        run_id, epochs=num_epochs, patience=patience
+        run_id,
+        run_cfg=run_cfg,
     )
 
     root_dir = "./results"
@@ -94,12 +97,8 @@ def run(
 
 
 if __name__ == "__main__":
-    num_epochs = 30
-    patience = 5
-    batch_size = 128
-    learning_rate = 0.0003
-
     dataset_id = WHARDatasetID.DSADS
+    run_cfg = TinyHARRunConfig(dataset_id=dataset_id.name)
 
     # create cfg for UCI HAR dataset
     cfg = get_dataset_cfg(dataset_id, "./datasets")
@@ -119,9 +118,12 @@ if __name__ == "__main__":
     ]
     cfg.parallelize = True
 
-    experiment_id = f"{dataset_id.name.lower()}_tinyhar_ep{num_epochs}_pat{patience}_bs{batch_size}_lr{learning_rate}"
-    mlflow.set_tracking_uri("http://localhost:5001")
-    mlflow.set_experiment(experiment_id)
+    experiment_id = run_cfg.create_experiment_id()
+    tracker = create_tracker(
+        backend=run_cfg.tracker_backend,  # type: ignore[arg-type]
+        experiment_name=experiment_id,
+        tracking_uri=run_cfg.tracking_uri,
+    )
 
     # create and run pre-processing pipeline
     pre_pipeline = PreProcessingPipeline(cfg)
@@ -139,8 +141,6 @@ if __name__ == "__main__":
             experiment_id,
             run_id,
             split,
-            num_epochs,
-            patience,
-            batch_size,
-            learning_rate,
+            run_cfg,
+            tracker,
         )
