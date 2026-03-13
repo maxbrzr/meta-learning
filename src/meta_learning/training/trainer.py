@@ -10,6 +10,9 @@ from tqdm.auto import tqdm
 
 from meta_learning.tracking import NullTracker, Tracker
 from meta_learning.training.run_config import TinyHARRunConfig
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EarlyStopping:
@@ -190,7 +193,7 @@ class Trainer:
         best_model_state = copy.deepcopy(self.model.state_dict())
         best_metrics: Dict[str, Dict[str, float]] = {}
 
-        print(f"Starting training on {self.device} for {epochs} epochs.")
+        logger.info("Starting training on %s for %s epochs.", self.device, epochs)
 
         with self.tracker.start_run(run_name=run_name):
             params = run_cfg.to_tracking_dict()
@@ -199,7 +202,7 @@ class Trainer:
             self.tracker.log_params(params)
 
             for epoch in range(epochs):
-                print(f"\nEpoch {epoch + 1}/{epochs}")
+                logger.info("Epoch %s/%s", epoch + 1, epochs)
 
                 # 1. Train
                 train_metrics = self._run_epoch(
@@ -217,10 +220,19 @@ class Trainer:
                 )
 
                 # 4. Print Progress
-                print(
-                    f"Train: Loss {train_metrics['loss']:.4f} | Acc {train_metrics['accuracy']:.4f} | F1 {train_metrics['f1_macro']:.4f}\n"
-                    f"Val:   Loss {val_metrics['loss']:.4f} | Acc {val_metrics['accuracy']:.4f} | F1 {val_metrics['f1_macro']:.4f}\n"
-                    f"Test:  Loss {test_metrics['loss']:.4f} | Acc {test_metrics['accuracy']:.4f} | F1 {test_metrics['f1_macro']:.4f}"
+                logger.info(
+                    "Train: Loss %.4f | Acc %.4f | F1 %.4f | "
+                    "Val: Loss %.4f | Acc %.4f | F1 %.4f | "
+                    "Test: Loss %.4f | Acc %.4f | F1 %.4f",
+                    train_metrics["loss"],
+                    train_metrics["accuracy"],
+                    train_metrics["f1_macro"],
+                    val_metrics["loss"],
+                    val_metrics["accuracy"],
+                    val_metrics["f1_macro"],
+                    test_metrics["loss"],
+                    test_metrics["accuracy"],
+                    test_metrics["f1_macro"],
                 )
 
                 # 5. Check Early Stopping & Save Best Model
@@ -234,14 +246,14 @@ class Trainer:
                         "val": val_metrics,
                         "test": test_metrics,
                     }
-                    print(">> Best model saved.")
+                    logger.info("Best model saved.")
 
                 if early_stopper.early_stop:
-                    print(f"Early stopping triggered after {epoch + 1} epochs.")
+                    logger.info("Early stopping triggered after %s epochs.", epoch + 1)
                     break
 
         # Load the best weights back into the model before returning
-        print("Restoring best model weights...")
+        logger.info("Restoring best model weights...")
         self.model.load_state_dict(best_model_state)
 
         return best_model_state, best_metrics

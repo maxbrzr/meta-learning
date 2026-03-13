@@ -5,6 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # --- 1. Adaptive Group Norm (The Modulation Layer) ---
 class AdaptiveGroupNorm1d(nn.Module):
@@ -339,8 +343,8 @@ if __name__ == "__main__":
     # Forward Pass
     logits = model(query_x, support_x, support_y)
 
-    print("Meta-TinyHAR output shape:", logits.shape)  # Expected: (4, 8)
+    logger.info("Meta-TinyHAR output shape: %s", logits.shape)  # Expected: (4, 8)
 
     # Test Null Condition (No support set provided)
     logits_null = model(query_x)
-    print("Null-Condition output shape:", logits_null.shape)
+    logger.info("Null-Condition output shape: %s", logits_null.shape)

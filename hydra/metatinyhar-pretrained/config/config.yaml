@@ -1,0 +1,39 @@
+defaults:
+  - _self_
+
+run_cfg:
+  dataset_id: DSADS
+  epochs: 30
+  patience: 5
+  batch_size: 12
+  learning_rate: 0.0003
+  shots_per_class: [1, 16]
+  final_eval_episodes: 64
+  tinyhar_checkpoint_path: null
+  set_encoder_variant: mean
+  set_encoder_num_heads: 4
+  class_aware: false
+  hypernetwork_variant: task
+  num_train_batches_override: 128
+  tracker_backend: mlflow
+  tracking_uri: http://localhost:5001
+
+data:
+  base_dir: datasets
+  sensor_channels:
+    - RA_xacc
+    - RA_yacc
+    - RA_zacc
+    - RA_xgyro
+    - RA_ygyro
+    - RA_zgyro
+    - RL_xacc
+    - RL_yacc
+    - RL_zacc
+    - RL_xgyro
+    - RL_ygyro
+    - RL_zgyro
+  parallelize: true
+
+paths:
+  pretrained_results_dir: results

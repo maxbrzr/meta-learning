@@ -17,6 +17,9 @@ from meta_learning.models.tiny_har import TinyHAR
 from meta_learning.tracking import Tracker, create_tracker
 from meta_learning.training.run_config import TinyHARRunConfig
 from meta_learning.training.trainer import Trainer
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def run(
@@ -42,16 +45,14 @@ def run(
         dataloaders["test"],
     )
 
-    print(f"num subjects / splits: {cfg.num_of_subjects}/{len(splits)}")
-    print(f"num channels: {len(cfg.sensor_channels)}")
-    print(f"Number of training samples: {len(train_loader) * run_cfg.batch_size}")
-    print(
-        f"Number of validation samples: {len(val_loader) * run_cfg.batch_size}"
-    )
-    print(f"Number of test samples: {len(test_loader) * run_cfg.batch_size}")
-    print(f"Number of training indices: {len(split.train_indices)}")
-    print(f"Number of validation indices: {len(split.val_indices)}")
-    print(f"Number of test indices: {len(split.test_indices)}")
+    logger.info("num subjects / splits: %s/%s", cfg.num_of_subjects, len(splits))
+    logger.info("num channels: %s", len(cfg.sensor_channels))
+    logger.info("Number of training samples: %s", len(train_loader) * run_cfg.batch_size)
+    logger.info("Number of validation samples: %s", len(val_loader) * run_cfg.batch_size)
+    logger.info("Number of test samples: %s", len(test_loader) * run_cfg.batch_size)
+    logger.info("Number of training indices: %s", len(split.train_indices))
+    logger.info("Number of validation indices: %s", len(split.val_indices))
+    logger.info("Number of test indices: %s", len(split.test_indices))
 
     model = TinyHAR(
         input_channels=len(cfg.sensor_channels),
@@ -135,7 +136,7 @@ if __name__ == "__main__":
 
     for i in range(len(splits)):
         split = splits[i]
-        print(f"Running split {i} / {len(splits) - 1}")
+        logger.info("Running split %s / %s", i, len(splits) - 1)
         run_id = f"split_{i}_{experiment_id}"
         run(
             experiment_id,

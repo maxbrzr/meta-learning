@@ -1,0 +1,23 @@
+defaults:
+  - _self_
+
+run_cfg:
+  dataset_id: UCI_HAR
+  epochs: 20
+  patience: 5
+  batch_size: 16
+  learning_rate: 0.0003
+  shots_per_class: 10
+  final_eval_episodes: 10
+  set_encoder_variant: mean
+  set_encoder_num_heads: 4
+  class_aware: false
+  hypernetwork_variant: task
+  num_train_batches_override: null
+  tracker_backend: mlflow
+  tracking_uri: http://localhost:5001
+
+data:
+  base_dir: datasets
+  sensor_channels: null
+  parallelize: true

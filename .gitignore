@@ -12,3 +12,4 @@ wheels/
 results/
 .env
 .DS_Store
+multirun

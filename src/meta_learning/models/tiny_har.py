@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class TinyHAR(nn.Module):
     """
@@ -230,10 +234,10 @@ if __name__ == "__main__":
 
     output = model(input_data)
 
-    print(f"Model Architecture:\n{model}")
-    print(f"\nInput shape: {input_data.shape}")
-    print(f"Output shape: {output.shape}")  # Expected: (32, 12)
+    logger.info("Model Architecture:\n%s", model)
+    logger.info("Input shape: %s", input_data.shape)
+    logger.info("Output shape: %s", output.shape)  # Expected: (32, 12)
 
     # Verify parameter count to ensure "Tiny" nature
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total Trainable Parameters: {total_params}")
+    logger.info("Total Trainable Parameters: %s", total_params)

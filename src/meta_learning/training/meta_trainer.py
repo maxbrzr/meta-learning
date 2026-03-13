@@ -16,8 +16,11 @@ from meta_learning.training.run_config import (
     MetaPretrainedRunConfig,
     MetaTrainRunConfig,
 )
+from meta_learning.utils.logging import get_logger
 
 MetaRunConfig = MetaTrainRunConfig | MetaPretrainedRunConfig
+
+logger = get_logger(__name__)
 
 
 class EarlyStopping:
@@ -379,9 +382,11 @@ class MetaTrainer:
                 "leakage-free support sets with full class coverage."
             )
         if not is_train and len(feasible_query_indices) != len(indices):
-            print(
-                f"{desc}: using {len(feasible_query_indices)}/{len(indices)} feasible "
-                "query indices (strict same-subject, leakage-free support)."
+            logger.info(
+                "%s: using %s/%s feasible query indices (strict same-subject, leakage-free support).",
+                desc,
+                len(feasible_query_indices),
+                len(indices),
             )
 
         ordered_query_indices = list(feasible_query_indices)
@@ -553,10 +558,14 @@ class MetaTrainer:
                     except ValueError:
                         # Skip if subject doesn't have enough classes to form a support set
                         skipped_missing_support += 1
-                        print(
-                            f"{desc}: skip subject {subject_id}, "
-                            f"episode {episode + 1}/{n_eval_episodes} "
-                            f"(cannot form full class-balanced support set for K={shots_this_episode})."
+                        logger.info(
+                            "%s: skip subject %s, episode %s/%s "
+                            "(cannot form full class-balanced support set for K=%s).",
+                            desc,
+                            subject_id,
+                            episode + 1,
+                            n_eval_episodes,
+                            shots_this_episode,
                         )
                         continue
 
@@ -564,10 +573,13 @@ class MetaTrainer:
                     query_idx = list(set(subj_indices) - set(support_idx))
                     if len(query_idx) == 0:
                         skipped_empty_query += 1
-                        print(
-                            f"{desc}: skip subject {subject_id}, "
-                            f"episode {episode + 1}/{n_eval_episodes} "
-                            "(no query samples left after support selection)."
+                        logger.info(
+                            "%s: skip subject %s, episode %s/%s "
+                            "(no query samples left after support selection).",
+                            desc,
+                            subject_id,
+                            episode + 1,
+                            n_eval_episodes,
                         )
                         continue
 
@@ -603,10 +615,11 @@ class MetaTrainer:
             all_targets=all_targets,
         )
         if skipped_missing_support > 0 or skipped_empty_query > 0:
-            print(
-                f"{desc}: calibration skips summary -> "
-                f"missing_support={skipped_missing_support}, "
-                f"empty_query={skipped_empty_query}"
+            logger.info(
+                "%s: calibration skips summary -> missing_support=%s, empty_query=%s",
+                desc,
+                skipped_missing_support,
+                skipped_empty_query,
             )
 
         if log_to_tracker:
@@ -634,9 +647,10 @@ class MetaTrainer:
             "test": {},
         }
 
-        print(
-            "Running final evaluation on current model: "
-            f"episodes={final_eval_episodes}, shots={shot_values}"
+        logger.info(
+            "Running final evaluation on current model: episodes=%s, shots=%s",
+            final_eval_episodes,
+            shot_values,
         )
 
         for shots in shot_values:
@@ -669,21 +683,23 @@ class MetaTrainer:
         self,
         run_id: str,
         run_cfg: MetaRunConfig,
-    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, object]]]:
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, Any]]]:
         epochs = run_cfg.epochs
         patience = run_cfg.patience
         early_stopper = EarlyStopping(patience=patience)
         best_model_state = copy.deepcopy(self.model.state_dict())
         best_metrics: Dict[str, Dict[str, Any]] = {}
 
-        print(f"Starting Meta-Training on {self.device} for {epochs} epochs.")
+        logger.info("Starting Meta-Training on %s for %s epochs.", self.device, epochs)
         if self.shots_per_class_range is not None:
-            print(
-                f"Config: Shots per Class range={self.shots_per_class_range} "
-                f"(train sampled per batch, val/test fixed at midpoint={self._eval_shots_per_class()})"
+            logger.info(
+                "Config: Shots per Class range=%s "
+                "(train sampled per batch, val/test fixed at midpoint=%s)",
+                self.shots_per_class_range,
+                self._eval_shots_per_class(),
             )
         else:
-            print(f"Config: Shots per Class={self.shots_per_class_fixed}")
+            logger.info("Config: Shots per Class=%s", self.shots_per_class_fixed)
 
         with self.tracker.start_run(run_name=run_id):
             params = run_cfg.to_tracking_dict()
@@ -692,7 +708,7 @@ class MetaTrainer:
             self.tracker.log_params(params)
 
             for epoch in range(epochs):
-                print(f"\nEpoch {epoch + 1}/{epochs}")
+                logger.info("Epoch %s/%s", epoch + 1, epochs)
 
                 # 1. Train
                 train_metrics = self._run_epoch(
@@ -709,10 +725,15 @@ class MetaTrainer:
                 #     self.split.test_indices, n_eval_episodes=32, desc="3-Test"
                 # )
 
-                print(
-                    f"Train: Loss {train_metrics['loss']:.4f} | Acc {train_metrics['accuracy']:.4f} | F1 {train_metrics['f1_macro']:.4f}\n"
-                    f"Val:   Loss {val_metrics['loss']:.4f} | Acc {val_metrics['accuracy']:.4f} | F1 {val_metrics['f1_macro']:.4f}\n"
-                    # f"Test:  Loss {test_metrics['loss']:.4f} | Acc {test_metrics['accuracy']:.4f} | F1 {test_metrics['f1_macro']:.4f}"
+                logger.info(
+                    "Train: Loss %.4f | Acc %.4f | F1 %.4f | "
+                    "Val: Loss %.4f | Acc %.4f | F1 %.4f",
+                    train_metrics["loss"],
+                    train_metrics["accuracy"],
+                    train_metrics["f1_macro"],
+                    val_metrics["loss"],
+                    val_metrics["accuracy"],
+                    val_metrics["f1_macro"],
                 )
 
                 # 4. Early Stopping
@@ -723,13 +744,13 @@ class MetaTrainer:
                         "val": val_metrics,
                         # "test": test_metrics,
                     }
-                    print(">> Best model saved.")
+                    logger.info("Best model saved.")
 
                 if early_stopper.early_stop:
-                    print(f"Early stopping triggered after {epoch + 1} epochs.")
+                    logger.info("Early stopping triggered after %s epochs.", epoch + 1)
                     break
 
-        print("Restoring best model weights...")
+        logger.info("Restoring best model weights...")
         self.model.load_state_dict(best_model_state)
 
         return best_model_state, best_metrics

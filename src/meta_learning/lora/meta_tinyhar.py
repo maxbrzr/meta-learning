@@ -19,6 +19,9 @@ from meta_learning.lora.set_encoders_class_aware import (
     SelfAttentionMeanClassAwareSetEncoder,
 )
 from meta_learning.models.tiny_har import TinyHAR
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class LightweightFeatureExtractor(nn.Module):
@@ -317,7 +320,10 @@ class MetaTinyHAR(nn.Module):
         # 1) TinyHAR support encoder inside set encoder.
         for key, value in tinyhar_state_dict.items():
             target_key = f"set_encoder.feature_encoder.{key}"
-            if target_key in current_state and current_state[target_key].shape == value.shape:
+            if (
+                target_key in current_state
+                and current_state[target_key].shape == value.shape
+            ):
                 current_state[target_key].copy_(value)
                 loaded += 1
             else:
@@ -506,4 +512,4 @@ if __name__ == "__main__":
     support_y = torch.randint(0, CLASSES, (BATCH_SIZE, K_SHOTS))
 
     logits = model(query_x, support_x, support_y)
-    print("Meta-TinyHAR (LoRA version) output shape:", logits.shape)
+    logger.info("Meta-TinyHAR (LoRA version) output shape: %s", logits.shape)

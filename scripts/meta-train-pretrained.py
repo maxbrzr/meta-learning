@@ -17,6 +17,9 @@ from meta_learning.lora.meta_tinyhar import MetaTinyHAR
 from meta_learning.tracking import Tracker, create_tracker
 from meta_learning.training.run_config import MetaPretrainedRunConfig
 from meta_learning.training.meta_trainer import MetaTrainer
+from meta_learning.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _load_tinyhar_state_dict(path: str) -> dict[str, torch.Tensor]:
@@ -107,11 +110,11 @@ def run(
     # create dataloaders for the specific split
     loader = Loader(session_df, window_df, post_pipeline.samples_dir, samples)
 
-    print(f"num subjects / splits: {cfg.num_of_subjects}/{len(splits)}")
-    print(f"num channels: {len(cfg.sensor_channels)}")
-    print(f"Number of training indices: {len(split.train_indices)}")
-    print(f"Number of validation indices: {len(split.val_indices)}")
-    print(f"Number of test indices: {len(split.test_indices)}")
+    logger.info("num subjects / splits: %s/%s", cfg.num_of_subjects, len(splits))
+    logger.info("num channels: %s", len(cfg.sensor_channels))
+    logger.info("Number of training indices: %s", len(split.train_indices))
+    logger.info("Number of validation indices: %s", len(split.val_indices))
+    logger.info("Number of test indices: %s", len(split.test_indices))
 
     model = MetaTinyHAR(
         input_channels=len(cfg.sensor_channels),
@@ -129,17 +132,18 @@ def run(
         checkpoint_path_or_dir=run_cfg.tinyhar_checkpoint_path,
         results_root="./results",
     )
-    print(f"Using TinyHAR checkpoint: {resolved_checkpoint_path}")
+    logger.info("Using TinyHAR checkpoint: %s", resolved_checkpoint_path)
     tinyhar_state_dict = _load_tinyhar_state_dict(resolved_checkpoint_path)
     load_stats = model.load_pretrained_tinyhar(tinyhar_state_dict)
-    print(
-        f"Loaded TinyHAR pretrained weights: {load_stats['loaded']} tensors "
-        f"(skipped: {load_stats['skipped']})."
+    logger.info(
+        "Loaded TinyHAR pretrained weights: %s tensors (skipped: %s).",
+        load_stats["loaded"],
+        load_stats["skipped"],
     )
 
     model.freeze_for_meta_learning()
     trainable_params = [p for p in model.parameters() if p.requires_grad]
-    print(f"Trainable parameter tensors after freezing: {len(trainable_params)}")
+    logger.info("Trainable parameter tensors after freezing: %s", len(trainable_params))
 
     optimizer = torch.optim.Adam(trainable_params, lr=run_cfg.learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
@@ -244,7 +248,7 @@ if __name__ == "__main__":
 
     for i in range(len(splits)):
         split = splits[i]
-        print(f"Running split {i} / {len(splits) - 1}")
+        logger.info("Running split %s / %s", i, len(splits) - 1)
         run_id = f"split_{i}_{experiment_id}"
         run(
             experiment_id,

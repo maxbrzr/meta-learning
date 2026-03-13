@@ -10,8 +10,12 @@ from tqdm.auto import tqdm
 from whar_datasets import Loader
 from whar_datasets.splitting.split import Split
 
+from meta_learning.utils.logging import get_logger
+
 # Assuming the model class is imported elsewhere
 # from meta_learning.style.dual_head_set_classifier import DualHeadSetClassifier
+
+logger = get_logger(__name__)
 
 
 class DualHeadTrainer:
@@ -194,7 +198,7 @@ class DualHeadTrainer:
         return metrics
 
     def fit(self, run_id: str, epochs: int = 20):
-        print(f"Starting Training on {self.device}...")
+        logger.info("Starting Training on %s...", self.device)
         with mlflow.start_run(run_name=run_id):  # type: ignore
             mlflow.log_params(  # type: ignore
                 {
@@ -207,16 +211,24 @@ class DualHeadTrainer:
             )
 
             for epoch in range(epochs):
-                print(f"\nEpoch {epoch + 1}/{epochs}")
+                logger.info("Epoch %s/%s", epoch + 1, epochs)
                 train_m = self._run_epoch(self.split.train_indices, True, "1-Train")
                 val_m = self._run_epoch(self.split.val_indices, False, "2-Val")
                 # test_m = self._run_epoch(self.split.test_indices, False, "3-Test")
 
-                print(
-                    f"Train | Loss: {train_m['loss']:.3f} | Subj Acc: {train_m['task_acc']:.3f} | Act Acc: {train_m['task_f1']:.3f} | KL Loss: {train_m['loss_kl']:.3f}"
+                logger.info(
+                    "Train | Loss: %.3f | Subj Acc: %.3f | Act Acc: %.3f | KL Loss: %.3f",
+                    train_m["loss"],
+                    train_m["task_acc"],
+                    train_m["task_f1"],
+                    train_m["loss_kl"],
                 )
-                print(
-                    f"Val   | Loss: {val_m['loss']:.3f} | Subj Acc: {val_m['task_acc']:.3f} | Act Acc: {val_m['task_f1']:.3f} | KL Loss: {val_m['loss_kl']:.3f}"
+                logger.info(
+                    "Val   | Loss: %.3f | Subj Acc: %.3f | Act Acc: %.3f | KL Loss: %.3f",
+                    val_m["loss"],
+                    val_m["task_acc"],
+                    val_m["task_f1"],
+                    val_m["loss_kl"],
                 )
                 # print(
                 #     f"Test  | Loss: {test_m['loss']:.3f} | Subj Acc: {test_m['task_acc']:.3f}"

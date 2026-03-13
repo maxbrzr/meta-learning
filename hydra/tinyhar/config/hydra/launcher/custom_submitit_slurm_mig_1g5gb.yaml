@@ -1,0 +1,7 @@
+defaults:
+  - custom_submitit_slurm
+
+cpus_per_task: 4
+
+additional_parameters:
+  gres: "gpu:1g.5gb:1"
