@@ -18,7 +18,7 @@ from whar_datasets import (
 import hydra
 from meta_learning.models.tiny_har import TinyHAR
 from meta_learning.tracking import create_tracker
-from meta_learning.training.run_config import TinyHARRunConfig
+from meta_learning.training.run_config import TrainRunConfig
 from meta_learning.training.trainer import Trainer
 from meta_learning.utils.logging import get_logger
 
@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
-    run_cfg = TinyHARRunConfig(**OmegaConf.to_container(cfg.run_cfg, resolve=True))  # type: ignore
+    run_cfg = TrainRunConfig(**OmegaConf.to_container(cfg.run_cfg, resolve=True))  # type: ignore
 
     datasets_dir = os.environ.get("DATASETS_DIR") or str(cfg.data.base_dir)
     output_dir = Path(HydraConfig.get().runtime.output_dir)
@@ -35,9 +35,10 @@ def main(cfg: DictConfig) -> None:
     dataset_id = WHARDatasetID[run_cfg.dataset_id]
     dataset_cfg = get_dataset_cfg(dataset_id, datasets_dir)
     dataset_cfg.datasets_dir = str(datasets_dir)
-    if cfg.data.sensor_channels is not None:
-        dataset_cfg.sensor_channels = cfg.data.sensor_channels
     dataset_cfg.parallelize = bool(cfg.data.parallelize)
+    dataset_cfg.selected_channels = (
+        cfg.data.sensor_channels or dataset_cfg.selected_channels
+    )
 
     experiment_id = run_cfg.create_experiment_id()
     tracker = create_tracker(
@@ -65,7 +66,9 @@ def main(cfg: DictConfig) -> None:
         dataloaders = adapter.get_dataloaders(batch_size=run_cfg.batch_size)
 
         model = TinyHAR(
-            input_channels=len(dataset_cfg.sensor_channels),
+            input_channels=len(
+                dataset_cfg.selected_channels or dataset_cfg.available_channels
+            ),
             window_size=int(dataset_cfg.window_time * dataset_cfg.sampling_freq),
             num_classes=dataset_cfg.num_of_activities,
         )

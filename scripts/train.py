@@ -15,7 +15,7 @@ from whar_datasets.splitting.split import Split
 
 from meta_learning.models.tiny_har import TinyHAR
 from meta_learning.tracking import Tracker, create_tracker
-from meta_learning.training.run_config import TinyHARRunConfig
+from meta_learning.training.run_config import TrainRunConfig
 from meta_learning.training.trainer import Trainer
 from meta_learning.utils.logging import get_logger
 
@@ -26,7 +26,7 @@ def run(
     experiment_id: str,
     run_id: str,
     split: Split,
-    run_cfg: TinyHARRunConfig,
+    run_cfg: TrainRunConfig,
     tracker: Tracker,
 ):
     # create and run post-processing pipeline for the specific split
@@ -47,8 +47,12 @@ def run(
 
     logger.info("num subjects / splits: %s/%s", cfg.num_of_subjects, len(splits))
     logger.info("num channels: %s", len(cfg.sensor_channels))
-    logger.info("Number of training samples: %s", len(train_loader) * run_cfg.batch_size)
-    logger.info("Number of validation samples: %s", len(val_loader) * run_cfg.batch_size)
+    logger.info(
+        "Number of training samples: %s", len(train_loader) * run_cfg.batch_size
+    )
+    logger.info(
+        "Number of validation samples: %s", len(val_loader) * run_cfg.batch_size
+    )
     logger.info("Number of test samples: %s", len(test_loader) * run_cfg.batch_size)
     logger.info("Number of training indices: %s", len(split.train_indices))
     logger.info("Number of validation indices: %s", len(split.val_indices))
@@ -98,25 +102,11 @@ def run(
 
 
 if __name__ == "__main__":
-    dataset_id = WHARDatasetID.DSADS
-    run_cfg = TinyHARRunConfig(dataset_id=dataset_id.name)
+    dataset_id = WHARDatasetID.WISDM_19_PHONE
+    run_cfg = TrainRunConfig(dataset_id=dataset_id.name)
 
     # create cfg for UCI HAR dataset
     cfg = get_dataset_cfg(dataset_id, "./datasets")
-    cfg.sensor_channels = [
-        "RA_xacc",
-        "RA_yacc",
-        "RA_zacc",
-        "RA_xgyro",
-        "RA_ygyro",
-        "RA_zgyro",
-        "RL_xacc",
-        "RL_yacc",
-        "RL_zacc",
-        "RL_xgyro",
-        "RL_ygyro",
-        "RL_zgyro",
-    ]
     cfg.parallelize = True
 
     experiment_id = run_cfg.create_experiment_id()

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from meta_learning.tracking import NullTracker, Tracker
-from meta_learning.training.run_config import TinyHARRunConfig
+from meta_learning.training.run_config import TrainRunConfig
 from meta_learning.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -185,7 +185,7 @@ class Trainer:
     def fit(
         self,
         run_name: str,
-        run_cfg: TinyHARRunConfig,
+        run_cfg: TrainRunConfig,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, float]]]:
         epochs = run_cfg.epochs
         patience = run_cfg.patience

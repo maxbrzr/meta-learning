@@ -2,28 +2,15 @@ defaults:
   - _self_
 
 run_cfg:
-  dataset_id: DAPHNET
-  epochs: 1
+  dataset_id: WISDM_19_PHONE
+  epochs: 50
   patience: 5
   batch_size: 128
-  learning_rate: 0.0003
+  learning_rate: 0.001
   tracker_backend: mlflow
   tracking_uri: http://localhost:5001
 
 data:
   base_dir: datasets
-  sensor_channels:
-    null
-    # - RA_xacc
-    # - RA_yacc
-    # - RA_zacc
-    # - RA_xgyro
-    # - RA_ygyro
-    # - RA_zgyro
-    # - RL_xacc
-    # - RL_yacc
-    # - RL_zacc
-    # - RL_xgyro
-    # - RL_ygyro
-    # - RL_zgyro
+  sensor_channels: null
   parallelize: true

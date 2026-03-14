@@ -4112,6 +4112,22 @@ wheels = [
 ]
 
 [[package]]
+name = "tslearn"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cd/08/8447f48fe3547ca92abae6875c63a7374b14b78f3b46518e16de45be640d/tslearn-0.8.1.tar.gz", hash = "sha256:68107857404e9a3869ed452fc3b8f1f0b5fdee61a04438c7ee957ec7e928e594", size = 9602140, upload-time = "2026-03-13T13:38:30.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/da/969c0efec60dcf52fb7b9ed9244a4913b2a7f0a266a0be4700cc1141471e/tslearn-0.8.1-py3-none-any.whl", hash = "sha256:2a79e1447df8c0708cfb8b06a65826ecb9b3d62e1b5b98fa26abbc77766f782d", size = 387871, upload-time = "2026-03-13T13:38:28.525Z" },
+]
+
+[[package]]
 name = "types-protobuf"
 version = "6.32.1.20260221"
 source = { registry = "https://pypi.org/simple" }
@@ -4313,7 +4329,7 @@ wheels = [
 [[package]]
 name = "whar-datasets"
 version = "0.1.0"
-source = { git = "https://github.com/teco-kit/whar-datasets.git#3e1eee043ca79f2acb48281b9ec4f4ce5ebddc60" }
+source = { git = "https://github.com/teco-kit/whar-datasets.git#f2d066ed99252d4c0805f1ed513688a5dce84c52" }
 dependencies = [
     { name = "dask" },
     { name = "hydra-core" },
@@ -4340,6 +4356,7 @@ dependencies = [
     { name = "tensorflow" },
     { name = "torch" },
     { name = "tqdm" },
+    { name = "tslearn" },
     { name = "types-tensorflow" },
     { name = "types-tqdm" },
     { name = "umap-learn" },

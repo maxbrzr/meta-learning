@@ -13,3 +13,4 @@ results/
 .env
 .DS_Store
 multirun
+outputs

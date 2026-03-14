@@ -96,19 +96,19 @@ def main(cfg: DictConfig) -> None:
     if override_ckpt:
         run_cfg.tinyhar_checkpoint_path = override_ckpt
 
-    dataset_id = WHARDatasetID[run_cfg.dataset_id]
-
     datasets_dir = os.environ.get("DATASETS_DIR") or str(cfg.data.base_dir)
     pretrained_results_dir = os.environ.get("PRETRAINED_RESULTS_DIR") or str(
         cfg.paths.pretrained_results_dir
     )
     output_dir = Path(HydraConfig.get().runtime.output_dir)
 
+    dataset_id: WHARDatasetID = WHARDatasetID[run_cfg.dataset_id]
     dataset_cfg = get_dataset_cfg(dataset_id, datasets_dir)
     dataset_cfg.datasets_dir = str(datasets_dir)
-    if cfg.data.sensor_channels is not None:
-        dataset_cfg.sensor_channels = cfg.data.sensor_channels
     dataset_cfg.parallelize = bool(cfg.data.parallelize)
+    dataset_cfg.selected_channels = (
+        cfg.data.sensor_channels or dataset_cfg.selected_channels
+    )
 
     experiment_id = run_cfg.create_experiment_id()
     tracker = create_tracker(
@@ -134,7 +134,9 @@ def main(cfg: DictConfig) -> None:
         loader = Loader(session_df, window_df, post_pipeline.samples_dir, samples)
 
         model = MetaTinyHAR(
-            input_channels=len(dataset_cfg.sensor_channels),
+            input_channels=len(
+                dataset_cfg.selected_channels or dataset_cfg.available_channels
+            ),
             window_size=int(dataset_cfg.window_time * dataset_cfg.sampling_freq),
             num_classes=dataset_cfg.num_of_activities,
             set_encoder_variant=run_cfg.set_encoder_variant,
@@ -183,7 +185,9 @@ def main(cfg: DictConfig) -> None:
             optimizer=optimizer,
             criterion=criterion,
             device=device,
-            num_classes=len(dataset_cfg.activity_names),
+            num_classes=len(
+                dataset_cfg.selected_channels or dataset_cfg.available_channels
+            ),
             shots_per_class=run_cfg.shots_per_class,
             batch_size=run_cfg.batch_size,
             num_train_batches_override=run_cfg.num_train_batches_override,

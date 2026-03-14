@@ -14,7 +14,7 @@ class BaseRunConfig(ABC):
 
 
 @dataclass
-class TinyHARRunConfig(BaseRunConfig):
+class TrainRunConfig(BaseRunConfig):
     dataset_id: str
     epochs: int = 30
     patience: int = 5
