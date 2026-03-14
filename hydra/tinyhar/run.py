@@ -1,32 +1,31 @@
 import json
 import os
 from pathlib import Path
-
-import torch
+import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
-from whar_datasets import (
-    Loader,
-    LOSOSplitter,
-    PostProcessingPipeline,
-    PreProcessingPipeline,
-    TorchAdapter,
-    WHARDatasetID,
-    get_dataset_cfg,
-)
-
-import hydra
-from meta_learning.models.tiny_har import TinyHAR
-from meta_learning.tracking import create_tracker
-from meta_learning.training.run_config import TrainRunConfig
-from meta_learning.training.trainer import Trainer
-from meta_learning.utils.logging import get_logger
-
-logger = get_logger(__name__)
 
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
+    import torch
+    from whar_datasets import (
+        Loader,
+        LOSOSplitter,
+        PostProcessingPipeline,
+        PreProcessingPipeline,
+        TorchAdapter,
+        WHARDatasetID,
+        get_dataset_cfg,
+    )
+    from meta_learning.models.tiny_har import TinyHAR
+    from meta_learning.tracking import create_tracker
+    from meta_learning.training.run_config import TrainRunConfig
+    from meta_learning.training.trainer import Trainer
+    from meta_learning.utils.logging import get_logger
+
+    logger = get_logger(__name__)
+
     run_cfg = TrainRunConfig(**OmegaConf.to_container(cfg.run_cfg, resolve=True))  # type: ignore
 
     datasets_dir = os.environ.get("DATASETS_DIR") or str(cfg.data.base_dir)
