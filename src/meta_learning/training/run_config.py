@@ -16,6 +16,7 @@ class BaseRunConfig(ABC):
 @dataclass
 class TrainRunConfig(BaseRunConfig):
     dataset_id: str
+    dataset_dir: str
     epochs: int = 30
     patience: int = 5
     batch_size: int = 128

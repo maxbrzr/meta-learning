@@ -3,6 +3,7 @@ defaults:
 
 run_cfg:
   dataset_id: WISDM_19_PHONE
+  dataset_dir: datasets/wisdm_19_phone
   epochs: 50
   patience: 5
   batch_size: 128

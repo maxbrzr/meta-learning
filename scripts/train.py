@@ -103,7 +103,9 @@ def run(
 
 if __name__ == "__main__":
     dataset_id = WHARDatasetID.WISDM_19_PHONE
-    run_cfg = TrainRunConfig(dataset_id=dataset_id.name)
+    run_cfg = TrainRunConfig(
+        dataset_id=dataset_id.name, dataset_dir="./datasets/wisdm_19_phone"
+    )
 
     # create cfg for UCI HAR dataset
     cfg = get_dataset_cfg(dataset_id, "./datasets")
