@@ -14,3 +14,4 @@ results/
 .DS_Store
 multirun
 outputs
+wandb
