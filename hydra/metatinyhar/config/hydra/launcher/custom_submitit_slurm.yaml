@@ -12,7 +12,7 @@ mem_gb: 32
 setup:
   - 'echo ">>> [DEBUG] Starting Job $SLURM_JOB_ID on Node: $(hostname)"'
   - 'echo ">>> [DEBUG] TMPDIR is located at: $TMPDIR"'
-  - 'DATASET_ROOT="${hydra:runtime.cwd}/datasets"'
+  - 'DATASET_ROOT="$(pwd)/datasets"'
   - 'DATASET_ID="${run_cfg.dataset_id}"'
   - 'SRC_DIR="$DATASET_ROOT/$DATASET_ID"'
   - 'ARCHIVE="$DATASET_ROOT/$DATASET_ID.tgz"'
